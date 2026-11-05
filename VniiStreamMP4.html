@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Imageboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 4chan Yotsuba B Theme Palette & Minimal Retro Styling */
+    body {
+      background-color: #d1d5ee;
+      color: #800000;
+      font-family: arial, helvetica, sans-serif;
+      margin: 0;
+      padding: 12px;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Protection styles against download/drag */
+    img, video {
+      -webkit-user-drag: none;
+      -khtml-user-drag: none;
+      -moz-user-drag: none;
+      -o-user-drag: none;
+      user-drag: none;
+      pointer-events: auto;
+    }
+
+    video::-internal-media-controls-download-button {
+      display: none !important;
+    }
+
+    /* 4chan Post Card Frame */
+    .chan-card {
+      background-color: #f0e0d6;
+      border: 1px solid #d9bfb7;
+      border-right: 2px solid #b7c5d9;
+      border-bottom: 2px solid #b7c5d9;
+      border-radius: 0px !important;
+      padding: 6px;
+    }
+
+    .chan-card:hover {
+      border-color: #800000;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #d1d5ee;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #b7c5d9;
+      border: 1px solid #800000;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen overflow-x-hidden" oncontextmenu="return false;">
+
+  <!-- MEDIA BOARD GRID (NO TEXT UI AT ALL) -->
+  <div id="mediaGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+    <!-- Items dynamically injected -->
+  </div>
+
+  <!-- ULTRA-MINIMAL RETRO LIGHTBOX MODAL -->
+  <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6" oncontextmenu="return false;">
+    
+    <div class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
+      <!-- Close Button Box -->
+      <div class="flex justify-end mb-1">
+        <button id="modalCloseBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-2 py-0.5 border border-[#800000] cursor-pointer">
+          [ X ]
+        </button>
+      </div>
+
+      <!-- Content Display -->
+      <div class="relative flex items-center justify-center overflow-hidden bg-[#d1d5ee] border border-[#d9bfb7]">
+        <!-- Video Player -->
+        <video 
+          id="modalVideo" 
+          controls 
+          controlsList="nodownload noremoteplayback" 
+          disablePictureInPicture
+          oncontextmenu="return false;"
+          draggable="false"
+          class="hidden max-h-[80vh] w-auto max-w-full outline-none"
+        ></video>
+
+        <!-- Image Display -->
+        <div id="modalImageWrapper" class="hidden relative">
+          <img 
+            id="modalImage" 
+            src="" 
+            alt="" 
+            draggable="false"
+            oncontextmenu="return false;"
+            class="max-h-[80vh] w-auto max-w-full object-contain select-none"
+          />
+          <div class="absolute inset-0 w-full h-full z-20" oncontextmenu="return false;"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- APPLICATION SCRIPT LOGIC -->
+  <script>
+    const REPO_USER = 'StreamMP4';
+    const REPO_NAME = 'VniiStreamMP4';
+    const GITHUB_API_URL = `https://api.github.com/repos/${REPO_USER}/${REPO_NAME}/contents`;
+
+    // Fallback media pool
+    const FALLBACK_MEDIA = [
+      {
+        type: "video",
+        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        poster: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "video",
+        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        poster: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "image",
+        download_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80",
+        poster: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "image",
+        download_url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80",
+        poster: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "video",
+        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+        poster: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "image",
+        download_url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+        poster: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "video",
+        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+        poster: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        type: "video",
+        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        poster: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80"
+      }
+    ];
+
+    let mediaItems = [];
+
+    // DevTools & Copy Protections
+    function initSecurity() {
+      document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        return false;
+      });
+
+      document.addEventListener('keydown', (e) => {
+        const key = e.key || e.keyCode;
+        if (
+          key === 'F12' || 
+          e.keyCode === 123 ||
+          (e.ctrlKey && e.shiftKey && ['I','i','J','j','C','c'].includes(key)) ||
+          (e.metaKey && e.altKey && ['I','i','J','j','C','c'].includes(key)) ||
+          ((e.ctrlKey || e.metaKey) && ['u','U','s','S'].includes(key))
+        ) {
+          e.preventDefault();
+          return false;
+        }
+      });
+
+      document.addEventListener('dragstart', (e) => {
+        if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') {
+          e.preventDefault();
+          return false;
+        }
+      });
+    }
+
+    // Fetch Repository Contents
+    async function fetchRepoMedia() {
+      try {
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+
+        if (Array.isArray(data) && data.length > 0) {
+          mediaItems = data.map(file => {
+            if (file.type !== 'file') return null;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isVid = ['mp4', 'webm', 'ogg', 'mov', 'm4v'].includes(ext);
+            const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext);
+
+            if (isVid || isImg) {
+              return {
+                type: isVid ? 'video' : 'image',
+                download_url: file.download_url || file.html_url,
+                poster: isVid 
+                  ? "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80"
+                  : (file.download_url || file.html_url)
+              };
+            }
+            return null;
+          }).filter(Boolean);
+
+          if (mediaItems.length === 0) mediaItems = FALLBACK_MEDIA;
+        } else {
+          mediaItems = FALLBACK_MEDIA;
+        }
+      } catch {
+        mediaItems = FALLBACK_MEDIA;
+      }
+      renderGrid();
+    }
+
+    // Render Grid
+    function renderGrid() {
+      const grid = document.getElementById('mediaGrid');
+      grid.innerHTML = '';
+
+      mediaItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "chan-card cursor-pointer relative overflow-hidden aspect-square flex items-center justify-center bg-[#d1d5ee]";
+
+        const isVid = item.type === 'video';
+
+        card.innerHTML = `
+          <div class="relative w-full h-full flex items-center justify-center overflow-hidden">
+            ${isVid ? `
+              <video 
+                src="${item.download_url}" 
+                poster="${item.poster}"
+                muted
+                preload="metadata"
+                controlsList="nodownload noremoteplayback"
+                disablePictureInPicture
+                oncontextmenu="return false;"
+                draggable="false"
+                class="w-full h-full object-cover pointer-events-none"
+              ></video>
+              <div class="absolute inset-0 bg-[#800000]/10 flex items-center justify-center">
+                <div class="w-8 h-8 bg-[#800000] text-white flex items-center justify-center border border-white text-xs">
+                  ▶
+                </div>
+              </div>
+            ` : `
+              <img 
+                src="${item.poster || item.download_url}" 
+                alt="" 
+                draggable="false"
+                oncontextmenu="return false;"
+                class="w-full h-full object-cover select-none"
+                onerror="this.src='https://placehold.co/400x400/d1d5ee/800000?text=Error';"
+              />
+            `}
+            <!-- Protection Overlay -->
+            <div class="absolute inset-0 z-20" oncontextmenu="return false;"></div>
+          </div>
+        `;
+
+        card.addEventListener('click', () => openModal(item));
+        grid.appendChild(card);
+      });
+    }
+
+    // Modal Control
+    const modal = document.getElementById('mediaModal');
+    const modalVideo = document.getElementById('modalVideo');
+    const modalImageWrapper = document.getElementById('modalImageWrapper');
+    const modalImage = document.getElementById('modalImage');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+    function openModal(item) {
+      if (item.type === 'video') {
+        modalImageWrapper.classList.add('hidden');
+        modalVideo.classList.remove('hidden');
+        modalVideo.src = item.download_url;
+        modalVideo.play().catch(() => {});
+      } else {
+        modalVideo.classList.add('hidden');
+        modalImageWrapper.classList.remove('hidden');
+        modalImage.src = item.download_url;
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      modalVideo.pause();
+      modalVideo.src = "";
+      modalImage.src = "";
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    window.onload = function() {
+      initSecurity();
+      fetchRepoMedia();
+    };
+  </script>
+</body>
+</html>
