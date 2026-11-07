@@ -65,14 +65,13 @@
 
 <body class="min-h-screen overflow-x-hidden" oncontextmenu="return false;">
 
-  <!-- MEDIA BOARD GRID (NO TEXT UI AT ALL) -->
+  <!-- MEDIA BOARD GRID -->
   <div id="mediaGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-    <!-- Items dynamically injected -->
+    <!-- Dynamic Content -->
   </div>
 
   <!-- ULTRA-MINIMAL RETRO LIGHTBOX MODAL -->
   <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6" oncontextmenu="return false;">
-    
     <div class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
       <!-- Close Button Box -->
       <div class="flex justify-end mb-1">
@@ -108,7 +107,6 @@
         </div>
       </div>
     </div>
-
   </div>
 
   <!-- APPLICATION SCRIPT LOGIC -->
@@ -116,50 +114,6 @@
     const REPO_USER = 'StreamMP4';
     const REPO_NAME = 'VniiStreamMP4';
     const GITHUB_API_URL = `https://api.github.com/repos/${REPO_USER}/${REPO_NAME}/contents`;
-
-    // Fallback media pool
-    const FALLBACK_MEDIA = [
-      {
-        type: "video",
-        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        poster: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "video",
-        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-        poster: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "image",
-        download_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80",
-        poster: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "image",
-        download_url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80",
-        poster: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "video",
-        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-        poster: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "image",
-        download_url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
-        poster: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "video",
-        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-        poster: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80"
-      },
-      {
-        type: "video",
-        download_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        poster: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80"
-      }
-    ];
 
     let mediaItems = [];
 
@@ -192,11 +146,13 @@
       });
     }
 
-    // Fetch Repository Contents
+    // Fetch Repository Contents Only
     async function fetchRepoMedia() {
+      const grid = document.getElementById('mediaGrid');
       try {
         const response = await fetch(GITHUB_API_URL);
-        if (!response.ok) throw new Error();
+        if (!response.ok) throw new Error('Failed to load GitHub repository contents.');
+        
         const data = await response.json();
 
         if (Array.isArray(data) && data.length > 0) {
@@ -209,23 +165,23 @@
             if (isVid || isImg) {
               return {
                 type: isVid ? 'video' : 'image',
-                download_url: file.download_url || file.html_url,
-                poster: isVid 
-                  ? "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80"
-                  : (file.download_url || file.html_url)
+                download_url: file.download_url || file.html_url
               };
             }
             return null;
           }).filter(Boolean);
 
-          if (mediaItems.length === 0) mediaItems = FALLBACK_MEDIA;
+          if (mediaItems.length === 0) {
+            grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">No images or videos found in the repository.</div>`;
+            return;
+          }
+          renderGrid();
         } else {
-          mediaItems = FALLBACK_MEDIA;
+          grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">Repository is empty.</div>`;
         }
-      } catch {
-        mediaItems = FALLBACK_MEDIA;
+      } catch (err) {
+        grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">Error loading media from GitHub repository.</div>`;
       }
-      renderGrid();
     }
 
     // Render Grid
@@ -243,8 +199,7 @@
           <div class="relative w-full h-full flex items-center justify-center overflow-hidden">
             ${isVid ? `
               <video 
-                src="${item.download_url}" 
-                poster="${item.poster}"
+                src="${item.download_url}#t=0.1" 
                 muted
                 preload="metadata"
                 controlsList="nodownload noremoteplayback"
@@ -260,12 +215,11 @@
               </div>
             ` : `
               <img 
-                src="${item.poster || item.download_url}" 
+                src="${item.download_url}" 
                 alt="" 
                 draggable="false"
                 oncontextmenu="return false;"
                 class="w-full h-full object-cover select-none"
-                onerror="this.src='https://placehold.co/400x400/d1d5ee/800000?text=Error';"
               />
             `}
             <!-- Protection Overlay -->
