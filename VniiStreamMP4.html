@@ -46,16 +46,15 @@
 
 <body class="min-h-screen overflow-x-hidden">
 
-  <!-- BACKGROUND AUDIO PLAYER -->
-  <audio id="bgAudio" loop preload="auto">
+  <!-- HIDDEN BACKGROUND AUDIO PLAYER -->
+  <audio id="bgAudio" loop autoplay class="hidden">
     <source src="https://raw.githubusercontent.com/StreamMP4/VniiStreamMP4/main/Jhoom%20Rb%20Mix%20Ali%20Zafar%20128%20Kbps.mp3" type="audio/mpeg">
   </audio>
 
-  <!-- AUDIO CONTROLLER BANNER -->
-  <div class="mb-4 p-2 bg-[#f0e0d6] border border-[#800000] flex justify-between items-center text-xs font-mono">
-    <span>♫ Playing: Jhoom (Rb Mix) - Ali Zafar</span>
-    <button id="audioToggleBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white px-2 py-0.5 border border-[#800000] cursor-pointer">
-      [ MUTE ]
+  <!-- TOP ACTION BAR -->
+  <div class="mb-4 flex justify-end">
+    <button id="shuffleBtn" class="bg-[#f0e0d6] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-3 py-1 border border-[#800000] cursor-pointer shadow-sm">
+      [ SHUFFLE ]
     </button>
   </div>
 
@@ -66,7 +65,7 @@
 
   <!-- ULTRA-MINIMAL RETRO LIGHTBOX MODAL -->
   <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6">
-    <div class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
+    <div id="modalBox" class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 max-w-5xl max-h-[90vh] w-full flex flex-col shadow-2xl">
       <!-- Modal Header Action Bar -->
       <div class="flex justify-between items-center mb-1">
         <button id="modalShareBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-2 py-0.5 border border-[#800000] cursor-pointer">
@@ -77,8 +76,8 @@
         </button>
       </div>
 
-      <!-- Content Display -->
-      <div class="relative flex items-center justify-center overflow-hidden bg-[#d1d5ee] border border-[#d9bfb7]">
+      <!-- Content Display (Swipe Target) -->
+      <div id="modalSwipeArea" class="relative flex items-center justify-center overflow-hidden bg-[#d1d5ee] border border-[#d9bfb7] min-h-[50vh]">
         <!-- Video Player -->
         <video 
           id="modalVideo" 
@@ -92,9 +91,13 @@
             id="modalImage" 
             src="" 
             alt="" 
-            class="max-h-[80vh] w-auto max-w-full object-contain"
+            class="max-h-[80vh] w-auto max-w-full object-contain select-none pointer-events-none"
           />
         </div>
+
+        <!-- Navigation Arrows for Desktop/Tablet -->
+        <button id="prevBtn" class="absolute left-2 bg-[#f0e0d6]/80 hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-sm px-2 py-1 border border-[#800000] cursor-pointer z-10">❮</button>
+        <button id="nextBtn" class="absolute right-2 bg-[#f0e0d6]/80 hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-sm px-2 py-1 border border-[#800000] cursor-pointer z-10">❯</button>
       </div>
     </div>
   </div>
@@ -106,38 +109,34 @@
     const GITHUB_API_URL = `https://api.github.com/repos/${REPO_USER}/${REPO_NAME}/contents`;
 
     let mediaItems = [];
-    let activeModalItem = null;
+    let currentIndex = 0;
 
-    // Background Audio Handler
-    const bgAudio = document.getElementById('bgAudio');
-    const audioToggleBtn = document.getElementById('audioToggleBtn');
-
-    function initAudio() {
+    // Silent Background Audio Player Initializer
+    function initHiddenAudio() {
+      const bgAudio = document.getElementById('bgAudio');
       bgAudio.volume = 0.5;
-      const playPromise = bgAudio.play();
 
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          // If browser blocks autoplay, start on first user interaction
-          const startAudioOnInteraction = () => {
-            bgAudio.play();
-            document.removeEventListener('click', startAudioOnInteraction);
-            document.removeEventListener('keydown', startAudioOnInteraction);
-          };
-          document.addEventListener('click', startAudioOnInteraction);
-          document.addEventListener('keydown', startAudioOnInteraction);
-        });
+      const attemptPlay = () => {
+        bgAudio.play().catch(() => {});
+      };
+
+      attemptPlay();
+
+      const forcePlayOnInteraction = () => {
+        bgAudio.play();
+        document.removeEventListener('click', forcePlayOnInteraction);
+        document.removeEventListener('keydown', forcePlayOnInteraction);
+      };
+      document.addEventListener('click', forcePlayOnInteraction);
+      document.addEventListener('keydown', forcePlayOnInteraction);
+    }
+
+    // Fisher-Yates Shuffle Algorithm
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
       }
-
-      audioToggleBtn.addEventListener('click', () => {
-        if (bgAudio.paused) {
-          bgAudio.play();
-          audioToggleBtn.textContent = '[ MUTE ]';
-        } else {
-          bgAudio.pause();
-          audioToggleBtn.textContent = '[ UNMUTE ]';
-        }
-      });
     }
 
     // Share Link Utility
@@ -165,7 +164,6 @@
         if (Array.isArray(data) && data.length > 0) {
           mediaItems = data.map(file => {
             if (file.type !== 'file') return null;
-            // Ignore the audio track from grid rendering
             if (file.name.includes('Jhoom')) return null;
 
             const ext = file.name.split('.').pop().toLowerCase();
@@ -199,7 +197,7 @@
       const grid = document.getElementById('mediaGrid');
       grid.innerHTML = '';
 
-      mediaItems.forEach(item => {
+      mediaItems.forEach((item, index) => {
         const card = document.createElement('div');
         card.className = "chan-card relative flex flex-col justify-between aspect-square bg-[#d1d5ee]";
 
@@ -235,7 +233,7 @@
           </div>
         `;
 
-        card.querySelector('.media-click-area').addEventListener('click', () => openModal(item));
+        card.querySelector('.media-click-area').addEventListener('click', () => openModal(index));
         card.querySelector('.share-btn').addEventListener('click', (e) => {
           e.stopPropagation();
           shareMedia(item.download_url);
@@ -245,16 +243,31 @@
       });
     }
 
-    // Modal Control
+    // Modal Control & Swiping
     const modal = document.getElementById('mediaModal');
     const modalVideo = document.getElementById('modalVideo');
     const modalImageWrapper = document.getElementById('modalImageWrapper');
     const modalImage = document.getElementById('modalImage');
     const modalCloseBtn = document.getElementById('modalCloseBtn');
     const modalShareBtn = document.getElementById('modalShareBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const modalSwipeArea = document.getElementById('modalSwipeArea');
 
-    function openModal(item) {
-      activeModalItem = item;
+    function openModal(index) {
+      currentIndex = index;
+      updateModalContent();
+      modal.classList.remove('hidden');
+    }
+
+    function updateModalContent() {
+      const item = mediaItems[currentIndex];
+      if (!item) return;
+
+      modalVideo.pause();
+      modalVideo.src = "";
+
       if (item.type === 'video') {
         modalImageWrapper.classList.add('hidden');
         modalVideo.classList.remove('hidden');
@@ -265,7 +278,6 @@
         modalImageWrapper.classList.remove('hidden');
         modalImage.src = item.download_url;
       }
-      modal.classList.remove('hidden');
     }
 
     function closeModal() {
@@ -273,23 +285,69 @@
       modalVideo.pause();
       modalVideo.src = "";
       modalImage.src = "";
-      activeModalItem = null;
+    }
+
+    function showNext() {
+      currentIndex = (currentIndex + 1) % mediaItems.length;
+      updateModalContent();
+    }
+
+    function showPrev() {
+      currentIndex = (currentIndex - 1 + mediaItems.length) % mediaItems.length;
+      updateModalContent();
+    }
+
+    nextBtn.addEventListener('click', (e) => { e.stopPropagation(); showNext(); });
+    prevBtn.addEventListener('click', (e) => { e.stopPropagation(); showPrev(); });
+
+    // Touch Swipe Detection
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    modalSwipeArea.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, {passive: true});
+
+    modalSwipeArea.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    }, {passive: true});
+
+    function handleSwipe() {
+      const swipeThreshold = 50;
+      if (touchEndX < touchStartX - swipeThreshold) {
+        showNext(); // Swiped Left -> Next item
+      }
+      if (touchEndX > touchStartX + swipeThreshold) {
+        showPrev(); // Swiped Right -> Previous item
+      }
     }
 
     modalShareBtn.addEventListener('click', () => {
-      if (activeModalItem) shareMedia(activeModalItem.download_url);
+      if (mediaItems[currentIndex]) shareMedia(mediaItems[currentIndex].download_url);
     });
 
     modalCloseBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();
     });
+
     document.addEventListener('keydown', (e) => {
+      if (modal.classList.contains('hidden')) return;
       if (e.key === 'Escape') closeModal();
+      if (e.key === 'ArrowRight') showNext();
+      if (e.key === 'ArrowLeft') showPrev();
+    });
+
+    shuffleBtn.addEventListener('click', () => {
+      if (mediaItems.length > 0) {
+        shuffleArray(mediaItems);
+        renderGrid();
+      }
     });
 
     window.onload = function() {
-      initAudio();
+      initHiddenAudio();
       fetchRepoMedia();
     };
   </script>
