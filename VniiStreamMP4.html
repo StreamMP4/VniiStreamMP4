@@ -13,25 +13,6 @@
       font-family: arial, helvetica, sans-serif;
       margin: 0;
       padding: 12px;
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-    }
-
-    /* Protection styles against download/drag */
-    img, video {
-      -webkit-user-drag: none;
-      -khtml-user-drag: none;
-      -moz-user-drag: none;
-      -o-user-drag: none;
-      user-drag: none;
-      pointer-events: auto;
-    }
-
-    video::-internal-media-controls-download-button {
-      display: none !important;
     }
 
     /* 4chan Post Card Frame */
@@ -63,7 +44,20 @@
   </style>
 </head>
 
-<body class="min-h-screen overflow-x-hidden" oncontextmenu="return false;">
+<body class="min-h-screen overflow-x-hidden">
+
+  <!-- BACKGROUND AUDIO PLAYER -->
+  <audio id="bgAudio" loop preload="auto">
+    <source src="https://raw.githubusercontent.com/StreamMP4/VniiStreamMP4/main/Jhoom%20Rb%20Mix%20Ali%20Zafar%20128%20Kbps.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- AUDIO CONTROLLER BANNER -->
+  <div class="mb-4 p-2 bg-[#f0e0d6] border border-[#800000] flex justify-between items-center text-xs font-mono">
+    <span>♫ Playing: Jhoom (Rb Mix) - Ali Zafar</span>
+    <button id="audioToggleBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white px-2 py-0.5 border border-[#800000] cursor-pointer">
+      [ MUTE ]
+    </button>
+  </div>
 
   <!-- MEDIA BOARD GRID -->
   <div id="mediaGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -71,10 +65,13 @@
   </div>
 
   <!-- ULTRA-MINIMAL RETRO LIGHTBOX MODAL -->
-  <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6" oncontextmenu="return false;">
+  <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6">
     <div class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
-      <!-- Close Button Box -->
-      <div class="flex justify-end mb-1">
+      <!-- Modal Header Action Bar -->
+      <div class="flex justify-between items-center mb-1">
+        <button id="modalShareBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-2 py-0.5 border border-[#800000] cursor-pointer">
+          [ SHARE ]
+        </button>
         <button id="modalCloseBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-2 py-0.5 border border-[#800000] cursor-pointer">
           [ X ]
         </button>
@@ -86,10 +83,6 @@
         <video 
           id="modalVideo" 
           controls 
-          controlsList="nodownload noremoteplayback" 
-          disablePictureInPicture
-          oncontextmenu="return false;"
-          draggable="false"
           class="hidden max-h-[80vh] w-auto max-w-full outline-none"
         ></video>
 
@@ -99,11 +92,8 @@
             id="modalImage" 
             src="" 
             alt="" 
-            draggable="false"
-            oncontextmenu="return false;"
-            class="max-h-[80vh] w-auto max-w-full object-contain select-none"
+            class="max-h-[80vh] w-auto max-w-full object-contain"
           />
-          <div class="absolute inset-0 w-full h-full z-20" oncontextmenu="return false;"></div>
         </div>
       </div>
     </div>
@@ -116,34 +106,51 @@
     const GITHUB_API_URL = `https://api.github.com/repos/${REPO_USER}/${REPO_NAME}/contents`;
 
     let mediaItems = [];
+    let activeModalItem = null;
 
-    // DevTools & Copy Protections
-    function initSecurity() {
-      document.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        return false;
-      });
+    // Background Audio Handler
+    const bgAudio = document.getElementById('bgAudio');
+    const audioToggleBtn = document.getElementById('audioToggleBtn');
 
-      document.addEventListener('keydown', (e) => {
-        const key = e.key || e.keyCode;
-        if (
-          key === 'F12' || 
-          e.keyCode === 123 ||
-          (e.ctrlKey && e.shiftKey && ['I','i','J','j','C','c'].includes(key)) ||
-          (e.metaKey && e.altKey && ['I','i','J','j','C','c'].includes(key)) ||
-          ((e.ctrlKey || e.metaKey) && ['u','U','s','S'].includes(key))
-        ) {
-          e.preventDefault();
-          return false;
+    function initAudio() {
+      bgAudio.volume = 0.5;
+      const playPromise = bgAudio.play();
+
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // If browser blocks autoplay, start on first user interaction
+          const startAudioOnInteraction = () => {
+            bgAudio.play();
+            document.removeEventListener('click', startAudioOnInteraction);
+            document.removeEventListener('keydown', startAudioOnInteraction);
+          };
+          document.addEventListener('click', startAudioOnInteraction);
+          document.addEventListener('keydown', startAudioOnInteraction);
+        });
+      }
+
+      audioToggleBtn.addEventListener('click', () => {
+        if (bgAudio.paused) {
+          bgAudio.play();
+          audioToggleBtn.textContent = '[ MUTE ]';
+        } else {
+          bgAudio.pause();
+          audioToggleBtn.textContent = '[ UNMUTE ]';
         }
       });
+    }
 
-      document.addEventListener('dragstart', (e) => {
-        if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') {
-          e.preventDefault();
-          return false;
-        }
-      });
+    // Share Link Utility
+    function shareMedia(url) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+          alert('Link copied to clipboard!');
+        }).catch(() => {
+          prompt('Copy media link:', url);
+        });
+      } else {
+        prompt('Copy media link:', url);
+      }
     }
 
     // Fetch Repository Contents Only
@@ -158,6 +165,9 @@
         if (Array.isArray(data) && data.length > 0) {
           mediaItems = data.map(file => {
             if (file.type !== 'file') return null;
+            // Ignore the audio track from grid rendering
+            if (file.name.includes('Jhoom')) return null;
+
             const ext = file.name.split('.').pop().toLowerCase();
             const isVid = ['mp4', 'webm', 'ogg', 'mov', 'm4v'].includes(ext);
             const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext);
@@ -191,24 +201,20 @@
 
       mediaItems.forEach(item => {
         const card = document.createElement('div');
-        card.className = "chan-card cursor-pointer relative overflow-hidden aspect-square flex items-center justify-center bg-[#d1d5ee]";
+        card.className = "chan-card relative flex flex-col justify-between aspect-square bg-[#d1d5ee]";
 
         const isVid = item.type === 'video';
 
         card.innerHTML = `
-          <div class="relative w-full h-full flex items-center justify-center overflow-hidden">
+          <div class="relative w-full h-[82%] flex items-center justify-center overflow-hidden cursor-pointer media-click-area">
             ${isVid ? `
               <video 
                 src="${item.download_url}#t=0.1" 
                 muted
                 preload="metadata"
-                controlsList="nodownload noremoteplayback"
-                disablePictureInPicture
-                oncontextmenu="return false;"
-                draggable="false"
-                class="w-full h-full object-cover pointer-events-none"
+                class="w-full h-full object-cover"
               ></video>
-              <div class="absolute inset-0 bg-[#800000]/10 flex items-center justify-center">
+              <div class="absolute inset-0 bg-[#800000]/10 flex items-center justify-center pointer-events-none">
                 <div class="w-8 h-8 bg-[#800000] text-white flex items-center justify-center border border-white text-xs">
                   ▶
                 </div>
@@ -217,17 +223,24 @@
               <img 
                 src="${item.download_url}" 
                 alt="" 
-                draggable="false"
-                oncontextmenu="return false;"
-                class="w-full h-full object-cover select-none"
+                class="w-full h-full object-cover"
               />
             `}
-            <!-- Protection Overlay -->
-            <div class="absolute inset-0 z-20" oncontextmenu="return false;"></div>
+          </div>
+          <div class="flex justify-between items-center pt-1 border-t border-[#d9bfb7] text-[10px] font-mono">
+            <span>${item.type.toUpperCase()}</span>
+            <button class="share-btn bg-[#e0c0b7] hover:bg-[#800000] hover:text-white px-1 py-0.5 border border-[#800000] cursor-pointer">
+              [ SHARE ]
+            </button>
           </div>
         `;
 
-        card.addEventListener('click', () => openModal(item));
+        card.querySelector('.media-click-area').addEventListener('click', () => openModal(item));
+        card.querySelector('.share-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          shareMedia(item.download_url);
+        });
+
         grid.appendChild(card);
       });
     }
@@ -238,8 +251,10 @@
     const modalImageWrapper = document.getElementById('modalImageWrapper');
     const modalImage = document.getElementById('modalImage');
     const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const modalShareBtn = document.getElementById('modalShareBtn');
 
     function openModal(item) {
+      activeModalItem = item;
       if (item.type === 'video') {
         modalImageWrapper.classList.add('hidden');
         modalVideo.classList.remove('hidden');
@@ -258,7 +273,12 @@
       modalVideo.pause();
       modalVideo.src = "";
       modalImage.src = "";
+      activeModalItem = null;
     }
+
+    modalShareBtn.addEventListener('click', () => {
+      if (activeModalItem) shareMedia(activeModalItem.download_url);
+    });
 
     modalCloseBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => {
@@ -269,7 +289,7 @@
     });
 
     window.onload = function() {
-      initSecurity();
+      initAudio();
       fetchRepoMedia();
     };
   </script>
