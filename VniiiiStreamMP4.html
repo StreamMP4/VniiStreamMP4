@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Imageboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 4chan Yotsuba B Theme Palette & Minimal Retro Styling */
+    body {
+      background-color: #d1d5ee;
+      color: #800000;
+      font-family: arial, helvetica, sans-serif;
+      margin: 0;
+      padding: 12px;
+    }
+
+    /* 4chan Post Card Frame */
+    .chan-card {
+      background-color: #f0e0d6;
+      border: 1px solid #d9bfb7;
+      border-right: 2px solid #b7c5d9;
+      border-bottom: 2px solid #b7c5d9;
+      border-radius: 0px !important;
+      padding: 6px;
+    }
+
+    .chan-card:hover {
+      border-color: #800000;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #d1d5ee;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #b7c5d9;
+      border: 1px solid #800000;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen overflow-x-hidden">
+
+  <!-- HIDDEN BACKGROUND AUDIO PLAYER -->
+  <audio id="bgAudio" loop class="hidden">
+    <source src="https://raw.githubusercontent.com/StreamMP4/VniiStreamMP4/main/Jhoom%20Rb%20Mix%20Ali%20Zafar%20128%20Kbps.mp3#t=36" type="audio/mpeg">
+  </audio>
+
+  <!-- TOP ACTION BAR -->
+  <div class="mb-4 flex justify-end">
+    <button id="shuffleBtn" class="bg-[#f0e0d6] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-3 py-1 border border-[#800000] cursor-pointer shadow-sm">
+      [ SHUFFLE ]
+    </button>
+  </div>
+
+  <!-- MEDIA BOARD GRID -->
+  <div id="mediaGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+    <!-- Dynamic Content -->
+  </div>
+
+  <!-- ULTRA-MINIMAL RETRO LIGHTBOX MODAL -->
+  <div id="mediaModal" class="fixed inset-0 z-50 hidden bg-[#d1d5ee]/90 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6">
+    <div id="modalBox" class="relative bg-[#f0e0d6] border-2 border-[#800000] p-2 inline-flex flex-col shadow-2xl max-w-[95vw] max-h-[95vh]">
+      <!-- Modal Header Action Bar -->
+      <div class="flex justify-end items-center mb-1">
+        <button id="modalCloseBtn" class="bg-[#e0c0b7] hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-xs px-2 py-0.5 border border-[#800000] cursor-pointer">
+          [ X ]
+        </button>
+      </div>
+
+      <!-- Content Display (Swipe Target) -->
+      <div id="modalSwipeArea" class="relative inline-flex items-center justify-center overflow-hidden bg-[#d1d5ee] border border-[#d9bfb7]">
+        <!-- Video Player -->
+        <video 
+          id="modalVideo" 
+          controls 
+          class="hidden max-h-[80vh] w-auto max-w-full outline-none"
+        ></video>
+
+        <!-- Image Display -->
+        <div id="modalImageWrapper" class="hidden relative inline-flex">
+          <img 
+            id="modalImage" 
+            src="" 
+            alt="" 
+            class="max-h-[80vh] w-auto max-w-full object-contain select-none pointer-events-none block"
+          />
+        </div>
+
+        <!-- Navigation Arrows for Desktop/Tablet -->
+        <button id="prevBtn" class="absolute left-2 bg-[#f0e0d6]/80 hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-sm px-2 py-1 border border-[#800000] cursor-pointer z-10">❮</button>
+        <button id="nextBtn" class="absolute right-2 bg-[#f0e0d6]/80 hover:bg-[#800000] hover:text-white text-[#800000] font-mono text-sm px-2 py-1 border border-[#800000] cursor-pointer z-10">❯</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION SCRIPT LOGIC -->
+  <script>
+    const REPO_USER = 'StreamMP4';
+    const REPO_NAME = 'VniiStreamMP4';
+    const GITHUB_API_URL = `https://api.github.com/repos/${REPO_USER}/${REPO_NAME}/contents`;
+
+    let mediaItems = [];
+    let currentIndex = 0;
+
+    // Silent Background Audio Player Initializer
+    function initHiddenAudio() {
+      const bgAudio = document.getElementById('bgAudio');
+      bgAudio.volume = 0.5;
+      bgAudio.currentTime = 36;
+
+      const attemptPlay = () => {
+        bgAudio.play().catch(() => {});
+      };
+
+      attemptPlay();
+
+      const forcePlayOnInteraction = () => {
+        if (bgAudio.currentTime < 36) {
+          bgAudio.currentTime = 36;
+        }
+        bgAudio.play();
+        document.removeEventListener('click', forcePlayOnInteraction);
+        document.removeEventListener('keydown', forcePlayOnInteraction);
+      };
+      document.addEventListener('click', forcePlayOnInteraction);
+      document.addEventListener('keydown', forcePlayOnInteraction);
+    }
+
+    // Fisher-Yates Shuffle Algorithm
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    // Fetch Repository Contents Only
+    async function fetchRepoMedia() {
+      const grid = document.getElementById('mediaGrid');
+      try {
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error('Failed to load GitHub repository contents.');
+        
+        const data = await response.json();
+
+        if (Array.isArray(data) && data.length > 0) {
+          mediaItems = data.map(file => {
+            if (file.type !== 'file') return null;
+            if (file.name.includes('Jhoom')) return null;
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isVid = ['mp4', 'webm', 'ogg', 'mov', 'm4v'].includes(ext);
+            const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext);
+
+            if (isVid || isImg) {
+              return {
+                type: isVid ? 'video' : 'image',
+                download_url: file.download_url || file.html_url
+              };
+            }
+            return null;
+          }).filter(Boolean);
+
+          if (mediaItems.length === 0) {
+            grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">No images or videos found in the repository.</div>`;
+            return;
+          }
+          renderGrid();
+        } else {
+          grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">Repository is empty.</div>`;
+        }
+      } catch (err) {
+        grid.innerHTML = `<div class="col-span-full text-center text-[#800000] font-mono py-10">Error loading media from GitHub repository.</div>`;
+      }
+    }
+
+    // Render Grid
+    function renderGrid() {
+      const grid = document.getElementById('mediaGrid');
+      grid.innerHTML = '';
+
+      mediaItems.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = "chan-card relative flex flex-col justify-between aspect-square bg-[#d1d5ee]";
+
+        const isVid = item.type === 'video';
+
+        card.innerHTML = `
+          <div class="relative w-full h-full flex items-center justify-center overflow-hidden cursor-pointer media-click-area">
+            ${isVid ? `
+              <video 
+                src="${item.download_url}#t=0.1" 
+                muted
+                preload="metadata"
+                class="w-full h-full object-cover"
+              ></video>
+              <div class="absolute inset-0 bg-[#800000]/10 flex items-center justify-center pointer-events-none">
+                <div class="w-8 h-8 bg-[#800000] text-white flex items-center justify-center border border-white text-xs">
+                  ▶
+                </div>
+              </div>
+            ` : `
+              <img 
+                src="${item.download_url}" 
+                alt="" 
+                class="w-full h-full object-cover"
+              />
+            `}
+          </div>
+        `;
+
+        card.querySelector('.media-click-area').addEventListener('click', () => openModal(index));
+        grid.appendChild(card);
+      });
+    }
+
+    // Modal Control & Swiping
+    const modal = document.getElementById('mediaModal');
+    const modalVideo = document.getElementById('modalVideo');
+    const modalImageWrapper = document.getElementById('modalImageWrapper');
+    const modalImage = document.getElementById('modalImage');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const modalSwipeArea = document.getElementById('modalSwipeArea');
+
+    function openModal(index) {
+      currentIndex = index;
+      updateModalContent();
+      modal.classList.remove('hidden');
+    }
+
+    function updateModalContent() {
+      const item = mediaItems[currentIndex];
+      if (!item) return;
+
+      modalVideo.pause();
+      modalVideo.src = "";
+
+      if (item.type === 'video') {
+        modalImageWrapper.classList.add('hidden');
+        modalVideo.classList.remove('hidden');
+        modalVideo.src = item.download_url;
+        modalVideo.play().catch(() => {});
+      } else {
+        modalVideo.classList.add('hidden');
+        modalImageWrapper.classList.remove('hidden');
+        modalImage.src = item.download_url;
+      }
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      modalVideo.pause();
+      modalVideo.src = "";
+      modalImage.src = "";
+    }
+
+    function showNext() {
+      currentIndex = (currentIndex + 1) % mediaItems.length;
+      updateModalContent();
+    }
+
+    function showPrev() {
+      currentIndex = (currentIndex - 1 + mediaItems.length) % mediaItems.length;
+      updateModalContent();
+    }
+
+    nextBtn.addEventListener('click', (e) => { e.stopPropagation(); showNext(); });
+    prevBtn.addEventListener('click', (e) => { e.stopPropagation(); showPrev(); });
+
+    // Touch Swipe Detection
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    modalSwipeArea.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, {passive: true});
+
+    modalSwipeArea.addEventListener('touched', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    }, {passive: true});
+
+    modalSwipeArea.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    }, {passive: true});
+
+    function handleSwipe() {
+      const swipeThreshold = 50;
+      if (touchEndX < touchStartX - swipeThreshold) {
+        showNext(); // Swiped Left -> Next item
+      }
+      if (touchEndX > touchStartX + swipeThreshold) {
+        showPrev(); // Swiped Right -> Previous item
+      }
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (modal.classList.contains('hidden')) return;
+      if (e.key === 'Escape') closeModal();
+      if (e.key === 'ArrowRight') showNext();
+      if (e.key === 'ArrowLeft') showPrev();
+    });
+
+    shuffleBtn.addEventListener('click', () => {
+      if (mediaItems.length > 0) {
+        shuffleArray(mediaItems);
+        renderGrid();
+      }
+    });
+
+    window.onload = function() {
+      initHiddenAudio();
+      fetchRepoMedia();
+    };
+  </script>
+</body>
+</html>
